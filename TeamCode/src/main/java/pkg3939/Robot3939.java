@@ -5,26 +5,31 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
 
+import static java.lang.Math.*;
+
 public class Robot3939 {
 
-    public DcMotor RL, RR, FL, FR;
-    public Servo servoRight, servoLeft;
+    public DcMotor RL, RR, FL, FR;//drive motors
+    public DcMotor leftSlides, rightSlides;//linear slide motors
+    public Servo servoRight, servoLeft;//autonomous claw servos
+    public Servo bar;//foundation mover servo
 
-    public BNO055IMU imu;
-    private Orientation lastAngles = new Orientation();
-    double  globalAngle;
+    public BNO055IMU imu;//gyro
+    private Orientation lastAngles = new Orientation();//saves angles
+    double  globalAngle;//robot angle
 
-    public double FLpower, FRpower, RLpower, RRpower;
+    public double FLpower, FRpower, RLpower, RRpower;//power of the motors
+    public double speed = 10.0;
 
-    private static final double deadZone = 0.10;
+    public static final double deadZone = 0.10;
     public static final boolean earthIsFlat = true;
-    final double reduction = 5;//fine rotation for precise stacking. higher value = slower rotation using triggers
 
     private final int encoderTicks = 1120;
     private final double wheelDiameter = 3.85827;//in inches
@@ -36,14 +41,27 @@ public class Robot3939 {
         FR      = hwmap.dcMotor.get("front_right");
 
         RL.setDirection(DcMotorSimple.Direction.FORWARD);
-        FL.setDirection(DcMotorSimple.Direction.FORWARD);
+        FL.setDirection(DcMotorSimple.Direction.REVERSE);
         RR.setDirection(DcMotorSimple.Direction.REVERSE);
+        FR.setDirection(DcMotorSimple.Direction.REVERSE);
+    }
+
+    public void initLinearSlides(HardwareMap hwmap) {
+        leftSlides = hwmap.dcMotor.get("leftSlides");
+        rightSlides = hwmap.dcMotor.get("rightSlides");
+    }
+
+    public void setFront(HardwareMap hwmap) {
+        RL.setDirection(DcMotorSimple.Direction.REVERSE);
+        FL.setDirection(DcMotorSimple.Direction.FORWARD);
+        RR.setDirection(DcMotorSimple.Direction.FORWARD);
         FR.setDirection(DcMotorSimple.Direction.REVERSE);
     }
 
     public void initServos(HardwareMap hwmap) {
         servoRight = hwmap.servo.get("servoRight");
         servoLeft = hwmap.servo.get("servoLeft");
+        bar = hwmap.servo.get("bar");
     }
 
     public void initIMU(HardwareMap hwmap) {
@@ -75,62 +93,74 @@ public class Robot3939 {
         }
     }
 
-    public void setFLPower(double power)
-    {
-        if(power != FLpower)
-        {
-            FLpower = power;
-            FL.setPower(power);
+    boolean LTheld = false;
+    boolean RTheld = false;
+    public void setSpeed(boolean LTpressed, boolean RTpressed) {
+        if(!LTheld && LTpressed) {
+            LTheld = true;
+            speed--;
+        } else if(!LTpressed) {
+            LTheld = false;
         }
-    }
 
-    public void setRLPower(double power)
-    {
-        if(power != RLpower)
-        {
-            RLpower = power;
-            RL.setPower(power);
+        if(!RTheld && RTpressed) {
+            RTheld = true;
+            speed++;
+        } else if(!RTpressed) {
+            RTheld = false;
         }
-    }
 
-    public void setFRPower(double power)
-    {
-        if(power != FRpower)
-        {
-            FRpower = power;
-            FR.setPower(power);
-        }
-    }
-
-    public void setRRPower(double power)
-    {
-        if(power != RRpower)
-        {
-            RRpower = power;
-            RR.setPower(power);
-        }
+        speed = Range.clip(speed, 0, 10);
     }
 
     public void setAllGivenPower(double power) {
-        setFLPower(power);
-        setFRPower(power);
-        setRRPower(power);
-        setRLPower(power);
+        FL.setPower(power);
+        RL.setPower(power);
+        FR.setPower(power);
+        RR.setPower(power);
     }
 
-    public void setAllpower() {
-        setFLPower(FLpower);
-        setFRPower(FRpower);
-        setRRPower(RRpower);
-        setRLPower(RLpower);
+    public void setAllPower() {
+        FL.setPower(FLpower);
+        RL.setPower(RLpower);
+        FR.setPower(FRpower);
+        RR.setPower(RRpower);
     }
+
+
 
     public void stopMotors() {
         setAllGivenPower(0);
     }
 
+    public static double[] getComponents(double x, double y, double offset) {//offset = imu
+        double stickAngle = returnAngle(x, y);//if stick up, stickangle = 90
+        double offsetAngle = -stickAngle + offset;//stick - IMU
+
+        if(offsetAngle < 0)//get rid of negative angle
+            offsetAngle += 360.0;
+        double[] offsetPoint = new double[2];
+        offsetPoint[0] = getHypotenuse(x, y)*Math.cos(Math.toRadians(offsetAngle));
+        offsetPoint[1] = getHypotenuse(x, y)*Math.sin(Math.toRadians(offsetAngle));
+        return offsetPoint;
+    }
+
+    //Returns the angle in degrees from the origin to the specified point
+    public static double returnAngle(double x, double y) {
+        double[] angleDirection = new double[2];
+        angleDirection[0] = x - 0;
+        angleDirection[1] = y - 0;
+        return Math.toDegrees(Math.atan2(angleDirection[1], angleDirection[0]));
+    }
+
+
+    public static double getHypotenuse(double x, double y) {
+        return Math.sqrt(x*x + y*y);
+    }
+
+
     public void drive(double LX, double LY, double rotate) {
-        if((Math.abs(LX) > deadZone) || (Math.abs(LY) > deadZone) || (Math.abs(rotate) > deadZone)) {
+        if((abs(LX) > deadZone) || (abs(LY) > deadZone) || (abs(rotate) > deadZone)) {
             FLpower = LY - LX + rotate;
             FRpower = LY + LX - rotate;
             RRpower = LY - LX - rotate;
@@ -143,19 +173,21 @@ public class Robot3939 {
         }
 
         //get max power out of all 4 powers
-        double maxPower = Math.max(1.0, Math.max(Math.max(Math.abs(FLpower), Math.abs(RLpower)), Math.max(Math.abs(FRpower), Math.abs(RRpower))));
+        double maxPower = max(1.0, max(max(abs(FLpower), abs(RLpower)), max(abs(FRpower), abs(RRpower))));
 
-        //if any of them is greater than 1, it will slow down all by the same ratio
+        //if any of them is greater than 1, it will slow down all by the same ratio, for smoother control
         if(maxPower > 1.0) {
             FLpower /= maxPower;
             FRpower /= maxPower;
             RLpower /= maxPower;
             RRpower /= maxPower;
         }
-        FL.setPower(FLpower);
-        FR.setPower(FRpower);
-        RL.setPower(RLpower);
-        RR.setPower(RRpower);
+        double reduction = 312.0/435.0;//front wheels are 435 rpm, back wheels are 312 rpm
+        // so we have to decrease their speed to match that of the rear wheels.
+        FL.setPower(reduction*FLpower*speed/10.0);
+        FR.setPower(reduction*FRpower*speed/10.0);
+        RL.setPower(RLpower*speed/10.0);
+        RR.setPower(RRpower*speed/10.0);
     }
 
     //for autonomous, use only one axis at a time for now. still under development
@@ -192,43 +224,73 @@ public class Robot3939 {
         RR.setMode(DcMotor.RunMode.RUN_TO_POSITION);
         FR.setMode(DcMotor.RunMode.RUN_TO_POSITION);
 
-        setAllGivenPower(Math.abs(power));
+        setAllGivenPower(abs(power));
 
         stopMotors();
 
         useEncoders(true);
     }
 
-    public void fineTurn(double LT, double RT) {
-        if(LT > deadZone || RT > deadZone){//we don't have to worry about Range.clip here because the abs values will never exceed 1
-            FLpower = (-LT + RT)/reduction;
-            FRpower = (LT - RT)/reduction;
-            RRpower = (LT - RT)/reduction;
-            RLpower = (-LT + RT)/reduction;
-        }
-        setAllpower();
+//    public void fineTurn(double LT, double RT) {
+//        if(LT > deadZone || RT > deadZone){//we don't have to worry about Range.clip here because the abs values will never exceed 1
+//            FLpower = (-LT + RT)/reduction;
+//            FRpower = (LT - RT)/reduction;
+//            RRpower = (LT - RT)/reduction;
+//            RLpower = (-LT + RT)/reduction;
+//        }
+//        setAllpower();
+//    }
+
+    boolean barDown = false;
+    boolean aHeld = false;
+    boolean bHeld = false;
+    boolean leftClaw = false;
+    boolean rightClaw = false;
+    boolean xHeld = false;
+
+    public void setLeftClaw(boolean xPressed) {
+        if (!xHeld && xPressed) {
+            xHeld = true;
+            leftClaw = !leftClaw;
+        } else if (!xPressed)
+            xHeld = false;
+
+        if (leftClaw) //down
+            servoLeft.setPosition(0.33);
+
+        else if(earthIsFlat)//up
+            servoLeft.setPosition(0.65);
+
     }
 
-    boolean forks = false;
-    boolean aHeld = false;
+    public void setRightClaw(boolean bPressed) {
+        if (!bHeld && bPressed) {
+            bHeld = true;
+            rightClaw = !rightClaw;
+        } else if (!bPressed)
+            bHeld = false;
 
-    public void setForks(boolean aPressed) {
+        if (rightClaw) //down
+            servoRight.setPosition(0.33);
+        else if(earthIsFlat)//up
+            servoRight.setPosition(0);
+
+    }
+
+    public void hookFoundation(boolean aPressed) {
         if (!aHeld && aPressed) {
             aHeld = true;
-            forks = !forks;
+            barDown = !barDown;
         } else if (!aPressed)
             aHeld = false;
 
-        if (forks) {
-            servoLeft.setPosition(0.5);
-            servoRight.setPosition(0.5);
+        if (barDown) {//if true, set pos to down
+            bar.setPosition(1);//joe
         }
-        else if(earthIsFlat)
+        else if(earthIsFlat)//else, up
         {
-            servoLeft.setPosition(1);
-            servoRight.setPosition(0);
+            bar.setPosition(0);
         }
-
     }
 
     private void resetAngle()
@@ -269,21 +331,25 @@ public class Robot3939 {
      * See if we are moving in a straight line and if not return a power correction value.
      * @return Power adjustment, + is adjust left - is adjust right.
      */
-    public double checkDirection()
+    public double checkDirection(double startAngle, double power)
     {
         // The gain value determines how sensitive the correction is to direction changes.
         // You will have to experiment with your robot to get small smooth direction changes
         // to stay on a straight line.
-        double correction, angle, gain = .10;
+        double correction, angle, gain = .125 * power;
 
         angle = getAngle();
 
-        if (angle == 0)
-            correction = 0;             // no adjustment.
-        else
-            correction = -angle;        // reverse sign of angle for correction.
+//        if (angle == 0)
+//            correction = 0;             // no adjustment.
+//        else
+//            correction = -angle;        // reverse sign of angle for correction.
 
-        correction = correction * gain;
+        correction = angle - startAngle;
+
+        correction *= gain;
+
+        correction = Range.clip(correction, -1, 1);
 
         return correction;
     }
@@ -318,7 +384,7 @@ public class Robot3939 {
             return;
 
         // set power to rotate.
-        setAllpower();
+      //  setAllpower();
 
         // rotate until turn is completed.
         if (degrees < 0)

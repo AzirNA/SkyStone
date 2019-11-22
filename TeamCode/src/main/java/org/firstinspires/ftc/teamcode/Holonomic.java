@@ -2,11 +2,7 @@ package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
-import com.qualcomm.robotcore.util.Range;
 
 import pkg3939.Robot3939;
 
@@ -14,12 +10,12 @@ import pkg3939.Robot3939;
  * Created by maryjane on 11/6/2018.
  * after 1st meet
  * mecanum wheels
+ * Hi, edit
  */
 
 @TeleOp(name="Holonomic", group="Iterative Opmode")
 //@Disabled
-public class
-Holonomic extends LinearOpMode {
+public class Holonomic extends LinearOpMode {
     private ElapsedTime runtime = new ElapsedTime();
 
     //Declaration of the motors and servos goes here
@@ -29,43 +25,34 @@ Holonomic extends LinearOpMode {
 
     @Override //when init is pressed
     public void runOpMode(){
-
-        //Naming, Initialization of the hardware, use this deviceName in the robot controller phone
-        //use the name of the object in the code
         robot.initMotors(hardwareMap);
         robot.initServos(hardwareMap);
-        robot.initIMU(hardwareMap);
-        robot.useEncoders(false);
+        robot.setFront(hardwareMap);
+        //robot.initIMU(hardwareMap);
+        robot.useEncoders(false);//don't need encoders for teleop
 
         waitForStart();
         runtime.reset();
 
-        double speedSet = 5;//robot starts with speed 5 due to 40 ratio motors being op
-
         while (opModeIsActive()) {
             //forks
-             robot.setForks(gamepad1.a);
+             //robot.servoRight.setPosition(0.3);
+             robot.setRightClaw(gamepad1.b);//pressing a changes fork position, up to down, or vice versa
+             robot.setLeftClaw(gamepad1.x);
+             robot.hookFoundation(gamepad1.a);//pressing a changes claw position, up to down, or vice versa
+             robot.setSpeed(gamepad1.left_bumper, gamepad1.right_bumper);
 
-            //bumpers set speed of robot
-            if(gamepad1.right_bumper)
-                speedSet += 0.0005;
-            else if(gamepad1.left_bumper)
-                speedSet -= 0.0005;
-
-            speedSet =  Range.clip(speedSet, 1, 10);//makes sure speed is limited at 10.
-
-            if(!gamepad1.right_bumper && !gamepad1.left_bumper)//makes sure speed does not round every refresh. otherwise, speed won't be able to change
-                speedSet = Math.round(speedSet);
-            
-            //robot drive
-
-            robot.drive(gamepad1.left_stick_x*speedSet/10,
-                        gamepad1.left_stick_y*speedSet/10,
-                        gamepad1.right_stick_x*speedSet/10);
+            robot.drive(gamepad1.left_stick_x,
+                        gamepad1.left_stick_y,
+                        -gamepad1.right_stick_x);
 
             telemetry.addData("Drive", "Holonomic");
-            telemetry.addData("Global Heading", robot.getAngle());
-            telemetry.addData("speedSet", "%.2f", speedSet);
+            //telemetry.addData("Global Heading", robot.getAngle());
+            telemetry.addData("speed", robot.speed);
+            telemetry.addData("left servo", robot.servoLeft.getPosition());
+            telemetry.addData("right servo", robot.servoRight.getPosition());
+            telemetry.addData("foundationPos", robot.bar.getPosition());
+
             telemetry.update();
         }
     }
